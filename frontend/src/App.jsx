@@ -38,6 +38,9 @@ function App() {
   // Claims — empty until started from chat
   const [claims, setClaims] = useState([])
 
+  // Whether the user has completed at least one sync (gates Settings memberships)
+  const [hasSynced, setHasSynced] = useState(false)
+
   // Chat state
   const [agentQuestion, setAgentQuestion] = useState('')
   const [agentResponse, setAgentResponse] = useState(null)
@@ -152,6 +155,7 @@ function App() {
   // Called when user confirms membership in the modal
   const handleMembershipConfirmed = useCallback(() => {
     setShowMembershipModal(false)
+    setHasSynced(true)
     const pending = pendingPurchasesRef.current
     if (pending) {
       setPurchases(pending.purchases)
@@ -259,7 +263,7 @@ function App() {
           {currentView === 'Policy Database' && (
             <PolicyDatabase policyResearch={policyResearch} />
           )}
-          {currentView === 'Settings' && <Settings />}
+          {currentView === 'Settings' && <Settings hasSynced={hasSynced} />}
         </div>
       </main>
     </div>

@@ -82,8 +82,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 USER_PROFILE = {
-    "name": "Jhonatan Lopez",
-    "email": "jhonatan@gmail.com",
+    "name": "Alex Rivera",
+    "email": "alex.rivera@example.com",
     "memberships": {
         # "free" | "plus" | "total"
         "best_buy": "total",

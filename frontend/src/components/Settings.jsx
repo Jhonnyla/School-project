@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 
-export default function Settings() {
+export default function Settings({ hasSynced = false }) {
   const [notifications, setNotifications] = useState({
     returnAlerts:   true,
     emailDigest:    true,
@@ -9,16 +9,16 @@ export default function Settings() {
   })
 
   const [profile] = useState({
-    name:     'Jhonatan Lopez',
-    email:    'jhonatan@gmail.com',
+    name:     'Alex Rivera',
+    email:    'alex.rivera@example.com',
     timezone: 'America/New_York',
     currency: 'USD',
   })
 
   const [accounts] = useState([
-    { name: 'Gmail',      email: 'jhonatan@gmail.com', connected: true,  icon: '📧' },
-    { name: 'Outlook',    email: '—',                   connected: false, icon: '📮' },
-    { name: 'Apple Mail', email: '—',                   connected: false, icon: '🍎' },
+    { name: 'Gmail',      email: 'alex.rivera@example.com', connected: true,  icon: '📧' },
+    { name: 'Outlook',    email: '—',                        connected: false, icon: '📮' },
+    { name: 'Apple Mail', email: '—',                        connected: false, icon: '🍎' },
   ])
 
   const [memberships, setMemberships] = useState([])
@@ -93,7 +93,15 @@ export default function Settings() {
         title="Memberships"
         description="Select your current membership tier for each retailer. This affects the return window the agents use when researching your policies."
       >
-        {memberships.length === 0 ? (
+        {!hasSynced ? (
+          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+            <span className="text-3xl mb-2">🔒</span>
+            <p className="text-sm font-medium text-slate-600">Sync your inbox first</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Click <span className="font-semibold">Sync Inbox</span> on the Dashboard to load your purchases and configure your memberships.
+            </p>
+          </div>
+        ) : memberships.length === 0 ? (
           <p className="text-sm text-slate-500 py-2">Loading memberships…</p>
         ) : (
           <div className="space-y-6">
