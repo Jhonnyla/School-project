@@ -16,12 +16,13 @@ export default function Settings() {
   })
 
   const [accounts] = useState([
-    { name: 'Gmail',       email: 'jhonatan@gmail.com', connected: true,  icon: '📧' },
-    { name: 'Outlook',     email: '—',                   connected: false, icon: '📮' },
-    { name: 'Apple Mail',  email: '—',                   connected: false, icon: '🍎' },
+    { name: 'Gmail',      email: 'jhonatan@gmail.com', connected: true,  icon: '📧' },
+    { name: 'Outlook',    email: '—',                   connected: false, icon: '📮' },
+    { name: 'Apple Mail', email: '—',                   connected: false, icon: '🍎' },
   ])
 
   const [memberships, setMemberships] = useState([])
+  const [savingTier, setSavingTier] = useState(null) // retailer_key being saved
 
   useEffect(() => {
     fetch('/api/user/profile')
@@ -32,11 +33,47 @@ export default function Settings() {
 
   const toggle = (key) => setNotifications(prev => ({ ...prev, [key]: !prev[key] }))
 
-  const tierColor = (tier) => {
-    if (tier === 'plus'  || tier === 'prime')  return 'bg-blue-100 text-blue-700 border-blue-200'
-    if (tier === 'total' || tier === 'member') return 'bg-purple-100 text-purple-700 border-purple-200'
+  const handleTierChange = async (retailer_key, newTier) => {
+    // Optimistic update
+    setMemberships(prev =>
+      prev.map(m => {
+        if (m.retailer_key !== retailer_key) return m
+        const newTierInfo = m.available_tiers?.find(t => t.key === newTier)
+        return {
+          ...m,
+          tier: newTier,
+          tierLabel: newTierInfo?.label ?? newTier,
+          returnWindowDays: newTierInfo?.days ?? m.returnWindowDays,
+        }
+      })
+    )
+    setSavingTier(retailer_key)
+    try {
+      await fetch('/api/user/memberships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [retailer_key]: newTier }),
+      })
+    } catch {
+      // Silently fail in demo — optimistic update stays
+    } finally {
+      setSavingTier(null)
+    }
+  }
+
+  const getBestBuyMembership = () => memberships.find(m => m.retailer_key === 'best_buy')
+  const getAmazonMembership  = () => memberships.find(m => m.retailer_key === 'amazon')
+  const getOuraMembership    = () => memberships.find(m => m.retailer_key === 'oura')
+
+  const tierBadgeColor = (tier) => {
+    if (tier === 'total' || tier === 'prime')  return 'bg-purple-100 text-purple-700 border-purple-200'
+    if (tier === 'plus')                        return 'bg-blue-100 text-blue-700 border-blue-200'
     return 'bg-slate-100 text-slate-500 border-slate-200'
   }
+
+  const bb  = getBestBuyMembership()
+  const az  = getAmazonMembership()
+  const our = getOuraMembership()
 
   return (
     <div className="space-y-5 max-w-2xl">
@@ -53,50 +90,146 @@ export default function Settings() {
 
       {/* Memberships */}
       <Section
-        title="Memberships & Loyalty Programs"
-        description="Active memberships that extend your return windows beyond the standard policy."
+        title="Memberships"
+        description="Select your current membership tier for each retailer. This affects the return window the agents use when researching your policies."
       >
         {memberships.length === 0 ? (
           <p className="text-sm text-slate-500 py-2">Loading memberships…</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {memberships.map((m) => (
-              <li key={m.retailer} className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-semibold text-navy-900">{m.retailer}</p>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Return window: <span className="font-medium text-navy-900">{m.returnWindowDays} days</span>
-                    {' '}·{' '}
-                    <a
-                      href={m.policyUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-600 hover:underline"
-                    >
-                      View policy ↗
-                    </a>
-                  </p>
-                </div>
-                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${tierColor(m.tier)}`}>
-                  {m.tierLabel}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+          <div className="space-y-6">
 
-        {/* Best Buy Plus benefit callout */}
-        <div className="mt-3 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 flex items-start gap-3">
-          <span className="text-lg mt-0.5">💳</span>
-          <div>
-            <p className="text-sm font-semibold text-blue-800">My Best Buy Plus — Active</p>
-            <p className="text-xs text-blue-700 mt-0.5">
-              Your Plus membership doubles Best Buy's standard 15-day return window to
-              <span className="font-bold"> 30 days</span> on all eligible purchases.
-              The PPC automatically applies this when checking your eligibility.
-            </p>
+            {/* ── Best Buy ─────────────────────────────────────────────── */}
+            {bb && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🛍️</span>
+                    <p className="text-sm font-semibold text-navy-900">Best Buy</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${tierBadgeColor(bb.tier)}`}>
+                      {bb.tierLabel}
+                      {savingTier === 'best_buy' && ' (saving…)'}
+                    </span>
+                  </div>
+                  <a
+                    href="https://www.bestbuy.com/account"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-emerald-600 hover:underline flex items-center gap-1"
+                  >
+                    Link Best Buy Account ↗
+                  </a>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {bb.available_tiers.map(t => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => bb.tier !== t.key && handleTierChange('best_buy', t.key)}
+                      className={`px-3 py-2.5 rounded-lg border-2 text-left transition-all ${
+                        bb.tier === t.key
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold ${bb.tier === t.key ? 'text-emerald-700' : 'text-navy-900'}`}>
+                        {t.label}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">{t.days}-day returns</p>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Return window: <span className="font-medium text-navy-900">{bb.returnWindowDays} days</span>
+                  {' · '}
+                  <a href={bb.policyUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
+                    View policy ↗
+                  </a>
+                </p>
+              </div>
+            )}
+
+            <div className="border-t border-slate-100" />
+
+            {/* ── Amazon ───────────────────────────────────────────────── */}
+            {az && (
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📦</span>
+                    <p className="text-sm font-semibold text-navy-900">Amazon</p>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${tierBadgeColor(az.tier)}`}>
+                      {az.tierLabel}
+                      {savingTier === 'amazon' && ' (saving…)'}
+                    </span>
+                  </div>
+                  <a
+                    href="https://www.amazon.com/prime"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-emerald-600 hover:underline flex items-center gap-1"
+                  >
+                    Link Amazon Account ↗
+                  </a>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {az.available_tiers.map(t => (
+                    <button
+                      key={t.key}
+                      type="button"
+                      onClick={() => az.tier !== t.key && handleTierChange('amazon', t.key)}
+                      className={`px-3 py-2.5 rounded-lg border-2 text-left transition-all ${
+                        az.tier === t.key
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold ${az.tier === t.key ? 'text-emerald-700' : 'text-navy-900'}`}>
+                        {t.label}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-0.5">{t.days}-day returns</p>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Return window: <span className="font-medium text-navy-900">{az.returnWindowDays} days</span>
+                  {' · '}
+                  <a href={az.policyUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
+                    View policy ↗
+                  </a>
+                </p>
+              </div>
+            )}
+
+            <div className="border-t border-slate-100" />
+
+            {/* ── Oura ─────────────────────────────────────────────────── */}
+            {our && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">💍</span>
+                    <p className="text-sm font-semibold text-navy-900">Oura</p>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full border bg-slate-100 text-slate-500 border-slate-200">
+                      Standard
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Oura does not offer a paid membership program that extends return windows.
+                  All customers receive the same 30-day return policy.
+                </p>
+                <p className="text-xs text-slate-400 mt-2">
+                  Return window: <span className="font-medium text-navy-900">{our.returnWindowDays} days</span>
+                  {' · '}
+                  <a href={our.policyUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline">
+                    View policy ↗
+                  </a>
+                </p>
+              </div>
+            )}
+
           </div>
-        </div>
+        )}
       </Section>
 
       {/* Connected Accounts */}
@@ -157,17 +290,19 @@ export default function Settings() {
       </Section>
 
       {/* Agent Preferences */}
-      <Section title="Agent Preferences" description="Control how the PPC agent behaves.">
+      <Section title="Agent Preferences" description="How the multi-agent pipeline is configured.">
         <div className="space-y-3">
           {[
-            { label: 'Default Return Window', value: '30 days (fallback for unknown retailers)' },
-            { label: 'Auto-Scan Frequency',   value: 'Every 24 hours' },
-            { label: 'AI Model',              value: 'Groq / Llama 3.3-70B Versatile' },
-            { label: 'Agent Version',         value: 'PPC Agent v0.2' },
+            { label: 'Agent 1',              value: 'Policy Research Agent (Groq / Llama 3.3-70B + Tavily)' },
+            { label: 'Agent 2',              value: 'Purchase Concierge Agent (Groq / Llama 3.3-70B)' },
+            { label: 'Coordination',         value: 'Fixed pipeline — Research → Concierge' },
+            { label: 'Policy Data Source',   value: 'Live web search via Tavily API' },
+            { label: 'Default Return Window','value': '30 days (fallback for unknown retailers)' },
+            { label: 'Agent Version',        value: 'PPC Agent v1.0' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
-              <span className="text-sm text-slate-600">{label}</span>
-              <span className="text-sm font-medium text-navy-900">{value}</span>
+            <div key={label} className="flex items-start justify-between py-2 border-b border-slate-100 last:border-0 gap-4">
+              <span className="text-sm text-slate-600 shrink-0">{label}</span>
+              <span className="text-sm font-medium text-navy-900 text-right">{value}</span>
             </div>
           ))}
         </div>
