@@ -172,11 +172,11 @@ The user's name and email are hardcoded demo values and are never sent to any ex
 ### 1. Backend
 
 ```bash
-cd backend
+cd code/backend
 pip install -r requirements.txt
 ```
 
-Create `backend/.env`:
+Create `code/backend/.env`:
 ```
 GROQ_API_KEY=your_groq_key_here
 TAVILY_API_KEY=your_tavily_key_here
@@ -184,13 +184,13 @@ TAVILY_API_KEY=your_tavily_key_here
 
 Start the server:
 ```bash
-uvicorn main:app --reload --port 8000 --app-dir backend
+uvicorn main:app --reload --port 8000 --app-dir .
 ```
 
 ### 2. Frontend
 
 ```bash
-cd frontend
+cd code/frontend
 npm install
 npm run dev
 ```
@@ -210,24 +210,30 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ```
 PPC/
-├── backend/
-│   ├── main.py              # All agents, endpoints, LLM calls
-│   ├── requirements.txt
-│   └── .env                 # GROQ_API_KEY + TAVILY_API_KEY (not committed)
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx                        # State, routing, action handlers
-│   │   └── components/
-│   │       ├── AgentInteraction.jsx       # Chat box + pipeline UI + Start Claim
-│   │       ├── ActionButtons.jsx          # Sync Inbox, Research Policies
-│   │       ├── PurchasesTable.jsx         # Purchases + sync progress bar
-│   │       ├── PolicyDatabase.jsx         # Dynamic from research results
-│   │       ├── ActiveClaims.jsx           # Dynamic from claims state
-│   │       ├── Settings.jsx               # Membership tier selectors
-│   │       ├── SyncModal.jsx              # Post-sync membership confirmation
-│   │       ├── Sidebar.jsx
-│   │       └── WarrantyStatus.jsx
-│   ├── vite.config.js                     # API proxy /api → localhost:8000
-│   └── package.json
+├── code/
+│   ├── backend/
+│   │   ├── main.py              # All agents, endpoints, LLM calls
+│   │   ├── requirements.txt
+│   │   └── .env                 # GROQ_API_KEY + TAVILY_API_KEY (not committed)
+│   └── frontend/
+│       ├── src/
+│       │   ├── App.jsx                        # State, routing, action handlers
+│       │   └── components/
+│       │       ├── AgentInteraction.jsx       # Chat box + pipeline UI + Start Claim
+│       │       ├── ActionButtons.jsx          # Sync Inbox, Research Policies
+│       │       ├── PurchasesTable.jsx         # Purchases + sync progress bar
+│       │       ├── PolicyDatabase.jsx         # Dynamic from research results
+│       │       ├── ActiveClaims.jsx           # Dynamic from claims state
+│       │       ├── Settings.jsx               # Membership tier selectors
+│       │       ├── SyncModal.jsx              # Post-sync membership confirmation
+│       │       ├── Sidebar.jsx
+│       │       └── WarrantyStatus.jsx
+│       ├── vite.config.js                     # API proxy /api → localhost:8000
+│       └── package.json
+├── docs/
+│   ├── AGENT_ARCHITECTURE.md    # Mermaid diagrams — flowchart, sequence, ER
+│   ├── DESIGN_DOCUMENT.md       # Agent design doc (roles, I/O, comms, failures)
+│   ├── SECURITY_ANALYSIS.md     # Vulnerability register with mitigations
+│   └── assets/                  # Screenshots
 └── README.md
 ```
