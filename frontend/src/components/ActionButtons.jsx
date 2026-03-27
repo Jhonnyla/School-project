@@ -6,40 +6,29 @@ const actions = [
     loadingKey: 'sync',
     label: 'Sync Inbox',
     loadingLabel: 'Syncing…',
-    description: 'Scan your email receipts for purchases',
+    description: 'Scan your email receipts and load purchases',
     icon: '📥',
-    ariaLabel: 'Sync inbox to scan for new receipts',
+    ariaLabel: 'Sync inbox to scan for purchase receipts',
   },
   {
-    id: 'check-return',
-    loadingKey: 'check',
-    label: 'Check Return Eligibility',
-    loadingLabel: 'Checking…',
-    description: 'Check return eligibility for all purchases',
-    icon: '📋',
-    ariaLabel: 'Check return eligibility for all purchases',
-  },
-  {
-    id: 'add-calendar',
-    loadingKey: 'calendar',
-    label: 'Add to Calendar',
-    loadingLabel: 'Scheduling…',
-    description: 'Add return deadlines to your calendar',
-    icon: '📅',
-    ariaLabel: 'Add return deadlines to calendar',
+    id: 'research-policies',
+    loadingKey: 'research',
+    label: 'Research Policies',
+    loadingLabel: 'Researching…',
+    description: 'Agent 1 searches the web for live return & warranty policies',
+    icon: '🔍',
+    ariaLabel: 'Run Policy Research Agent on all purchases',
   },
 ]
 
 export default function ActionButtons({
   onSyncInbox,
-  onCheckReturn,
-  onAddCalendar,
+  onResearchPolicies,
   loadingAction,
 }) {
   const handlers = {
     'sync-inbox': onSyncInbox,
-    'check-return': onCheckReturn,
-    'add-calendar': onAddCalendar,
+    'research-policies': onResearchPolicies,
   }
 
   return (

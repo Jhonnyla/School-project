@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import Sidebar from './components/Sidebar'
 import PurchasesTable from './components/PurchasesTable'
 import AgentInteraction from './components/AgentInteraction'
@@ -6,23 +6,64 @@ import ActionButtons from './components/ActionButtons'
 import ActiveClaims from './components/ActiveClaims'
 import PolicyDatabase from './components/PolicyDatabase'
 import Settings from './components/Settings'
-import { mockPurchases } from './data/mockPurchases'
+import SyncModal from './components/SyncModal'
+
+// Sync progress steps (fake — for demo realism)
+const SYNC_STEPS = [
+  'Connecting to Gmail…',
+  'Scanning 1,243 emails…',
+  'Identifying purchase receipts…',
+  'Parsing receipt data…',
+  'Loading purchases…',
+]
 
 function App() {
   const [currentView, setCurrentView] = useState('Purchases')
-  const [purchases, setPurchases] = useState(mockPurchases)
+
+  // Purchases — empty until Sync is clicked
+  const [purchases, setPurchases] = useState([])
+
+  // Sync progress state
+  const [syncState, setSyncState] = useState({ active: false, progress: 0, stepIdx: 0 })
+  const syncIntervalRef = useRef(null)
+
+  // Membership modal — shown after sync completes
+  const [showMembershipModal, setShowMembershipModal] = useState(false)
+  // Pending purchases held until modal is confirmed
+  const pendingPurchasesRef = useRef(null)
+
+  // Policy research results → feeds PolicyDatabase
+  const [policyResearch, setPolicyResearch] = useState(null)  // null = not yet researched
+
+  // Claims — empty until started from chat
+  const [claims, setClaims] = useState([])
+
+  // Whether the user has completed at least one sync (gates Settings memberships)
+  const [hasSynced, setHasSynced] = useState(false)
+
+  // Chat state
   const [agentQuestion, setAgentQuestion] = useState('')
   const [agentResponse, setAgentResponse] = useState(null)
   const [isAgentLoading, setAgentLoading] = useState(false)
-  const [notification, setNotification] = useState(null) // { type: 'success'|'error', message }
-  const [loadingAction, setLoadingAction] = useState(null) // 'sync' | 'check' | 'calendar'
+
+  // Notifications
+  const [notification, setNotification] = useState(null)
+  const [loadingAction, setLoadingAction] = useState(null)
+
+  // Load claims from backend on mount (in case server already has some)
+  useEffect(() => {
+    fetch('/api/claims')
+      .then(r => r.json())
+      .then(data => setClaims(data.claims || []))
+      .catch(() => {})
+  }, [])
 
   const showNotification = (type, message) => {
     setNotification({ type, message })
     setTimeout(() => setNotification(null), 5000)
   }
 
-  // ── Chat box ─────────────────────────────────────────────────────────────
+  // ── Chat box ──────────────────────────────────────────────────────────────
   const handleAskAgent = useCallback(async (question) => {
     setAgentQuestion(question)
     setAgentLoading(true)
@@ -40,60 +81,105 @@ function App() {
         reasoning: 'Could not reach the backend. Make sure the FastAPI server is running on port 8000.',
         response: 'Connection error — the concierge service is unavailable right now.',
         sources: [],
+        pipeline: null,
+        claim_context: null,
       })
     } finally {
       setAgentLoading(false)
     }
   }, [])
 
-  // ── Sync Inbox ────────────────────────────────────────────────────────────
+  // ── Start a return claim from chat ────────────────────────────────────────
+  const handleStartClaim = useCallback(async (claimContext) => {
+    try {
+      const res = await fetch('/api/claims', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item: claimContext.item,
+          retailer: claimContext.retailer,
+          days_remaining: claimContext.days_remaining,
+          sources: claimContext.sources || [],
+        }),
+      })
+      const data = await res.json()
+      setClaims(prev => [...prev, data.claim])
+      showNotification('success', `✅ Return claim started for ${claimContext.item}. View it in Active Claims.`)
+      setCurrentView('Active Claims')
+    } catch {
+      showNotification('error', '❌ Could not start claim — is the backend running?')
+    }
+  }, [])
+
+  // ── Sync Inbox (with progress bar) ───────────────────────────────────────
   const handleSyncInbox = useCallback(async () => {
     setLoadingAction('sync')
+    setSyncState({ active: true, progress: 0, stepIdx: 0 })
+
+    // Start animated progress bar while the API call runs in parallel
+    let progress = 0
+    let stepIdx = 0
+    syncIntervalRef.current = setInterval(() => {
+      progress = Math.min(progress + 2, 92) // max out at 92% until API returns
+      stepIdx = Math.min(Math.floor(progress / (100 / SYNC_STEPS.length)), SYNC_STEPS.length - 1)
+      setSyncState({ active: true, progress, stepIdx })
+    }, 80)
+
     try {
       const res = await fetch('/api/agents/inbox-scout', { method: 'POST' })
       const data = await res.json()
-      // Backend sends ISO date strings — convert them back to Date objects
       const parsed = data.purchases.map((p) => ({
         ...p,
         purchaseDate: new Date(p.purchaseDate),
       }))
-      setPurchases(parsed)
+      // Hold purchases — release after membership modal is confirmed
+      pendingPurchasesRef.current = { purchases: parsed, scanned: data.scanned, found: data.found }
+
+      // Complete the progress bar
+      clearInterval(syncIntervalRef.current)
+      setSyncState({ active: true, progress: 100, stepIdx: SYNC_STEPS.length - 1 })
+
+      // Brief pause then show membership modal
+      setTimeout(() => {
+        setSyncState({ active: false, progress: 0, stepIdx: 0 })
+        setShowMembershipModal(true)
+      }, 500)
+    } catch {
+      clearInterval(syncIntervalRef.current)
+      setSyncState({ active: false, progress: 0, stepIdx: 0 })
+      showNotification('error', '❌ Sync failed — is the FastAPI backend running?')
+      setLoadingAction(null)
+    }
+  }, [])
+
+  // Called when user confirms membership in the modal
+  const handleMembershipConfirmed = useCallback(() => {
+    setShowMembershipModal(false)
+    setHasSynced(true)
+    const pending = pendingPurchasesRef.current
+    if (pending) {
+      setPurchases(pending.purchases)
       showNotification(
         'success',
-        `✅ Inbox synced! Scanned ${data.scanned.toLocaleString()} emails and found ${data.found} purchase receipt${data.found !== 1 ? 's' : ''}.`
+        `✅ Inbox synced! Scanned ${pending.scanned.toLocaleString()} emails and found ${pending.found} purchase receipt${pending.found !== 1 ? 's' : ''}.`
       )
-    } catch {
-      showNotification('error', '❌ Sync failed — is the FastAPI backend running?')
-    } finally {
-      setLoadingAction(null)
+      pendingPurchasesRef.current = null
     }
+    setLoadingAction(null)
   }, [])
 
-  // ── Check Return Eligibility ──────────────────────────────────────────────
-  const handleCheckReturn = useCallback(async () => {
-    setLoadingAction('check')
+  // ── Research Policies (Agent 1 → PolicyDatabase) ──────────────────────────
+  const handleResearchPolicies = useCallback(async () => {
+    setLoadingAction('research')
     try {
-      const res = await fetch('/api/agents/policy-researcher', { method: 'POST' })
+      const res = await fetch('/api/agents/research-policies', { method: 'POST' })
       const data = await res.json()
-      const q = 'Check return eligibility for all my purchases'
-      setAgentQuestion(q)
-      setAgentResponse({ question: q, ...data })
+      setPolicyResearch(data.retailer_cards || [])
+      setCurrentView('Policy Database')
+      const count = (data.retailer_cards || []).length
+      showNotification('success', `✅ Policy research complete — fetched live policies for ${count} retailer${count !== 1 ? 's' : ''}.`)
     } catch {
-      showNotification('error', '❌ Policy check failed — is the FastAPI backend running?')
-    } finally {
-      setLoadingAction(null)
-    }
-  }, [])
-
-  // ── Add to Calendar ───────────────────────────────────────────────────────
-  const handleAddCalendar = useCallback(async () => {
-    setLoadingAction('calendar')
-    try {
-      const res = await fetch('/api/agents/scheduler', { method: 'POST' })
-      const data = await res.json()
-      showNotification('success', data.message)
-    } catch {
-      showNotification('error', '❌ Scheduler failed — is the FastAPI backend running?')
+      showNotification('error', '❌ Policy research failed — is the FastAPI backend running?')
     } finally {
       setLoadingAction(null)
     }
@@ -101,6 +187,10 @@ function App() {
 
   return (
     <div className="flex min-h-screen bg-slate-100">
+      {showMembershipModal && (
+        <SyncModal onConfirm={handleMembershipConfirmed} />
+      )}
+
       <Sidebar currentView={currentView} onNavigate={setCurrentView} />
       <main className="flex-1 overflow-auto p-6 md:p-8">
         <div className="max-w-5xl mx-auto space-y-8">
@@ -136,15 +226,18 @@ function App() {
                 <h3 id="actions-heading" className="sr-only">Key actions</h3>
                 <ActionButtons
                   onSyncInbox={handleSyncInbox}
-                  onCheckReturn={handleCheckReturn}
-                  onAddCalendar={handleAddCalendar}
+                  onResearchPolicies={handleResearchPolicies}
                   loadingAction={loadingAction}
                 />
               </section>
 
               <section aria-labelledby="purchases-heading">
                 <h3 id="purchases-heading" className="sr-only">Recent purchases</h3>
-                <PurchasesTable purchases={purchases} />
+                <PurchasesTable
+                  purchases={purchases}
+                  syncState={syncState}
+                  syncSteps={SYNC_STEPS}
+                />
               </section>
 
               <section aria-labelledby="agent-heading">
@@ -154,16 +247,23 @@ function App() {
                   response={agentResponse?.response}
                   reasoning={agentResponse?.reasoning}
                   sources={agentResponse?.sources}
+                  pipeline={agentResponse?.pipeline}
+                  claimContext={agentResponse?.claim_context}
                   isLoading={isAgentLoading}
                   onAsk={handleAskAgent}
+                  onStartClaim={handleStartClaim}
                 />
               </section>
             </>
           )}
 
-          {currentView === 'Active Claims' && <ActiveClaims />}
-          {currentView === 'Policy Database' && <PolicyDatabase />}
-          {currentView === 'Settings' && <Settings />}
+          {currentView === 'Active Claims' && (
+            <ActiveClaims claims={claims} />
+          )}
+          {currentView === 'Policy Database' && (
+            <PolicyDatabase policyResearch={policyResearch} />
+          )}
+          {currentView === 'Settings' && <Settings hasSynced={hasSynced} />}
         </div>
       </main>
     </div>
