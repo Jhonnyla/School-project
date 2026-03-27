@@ -625,7 +625,7 @@ class ClaimCreate(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/user/profile")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def get_user_profile(request: Request):
     memberships_detail = []
 
@@ -685,7 +685,7 @@ async def get_user_profile(request: Request):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/user/memberships")
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def update_memberships(request: Request, payload: MembershipsUpdate):
     valid_bb = {"free", "plus", "total"}
     valid_az = {"standard", "prime"}
@@ -714,7 +714,7 @@ async def update_memberships(request: Request, payload: MembershipsUpdate):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/agents/inbox-scout")
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def agents_inbox_scout(request: Request):
     purchases = _build_purchases()
     return {
@@ -732,7 +732,7 @@ async def agents_inbox_scout(request: Request):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/agents/research-policies")
-@limiter.limit("5/minute")  # Most expensive endpoint — ~12 Tavily + 6 Groq calls per request
+@limiter.limit("15/minute")  # Most expensive endpoint — ~12 Tavily + 6 Groq calls per request
 async def agents_research_policies(request: Request):
     today = date.today()
     purchases = _build_purchases()
@@ -844,7 +844,7 @@ async def agents_research_policies(request: Request):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/agent/ask")
-@limiter.limit("20/minute")  # Each ask triggers Agent 1 (Tavily searches) + Agent 2 (Groq)
+@limiter.limit("60/minute")  # Each ask triggers Agent 1 (Tavily searches) + Agent 2 (Groq)
 async def ask(request: Request, payload: AskRequest):
     # Normalize whitespace — multi-space padding is sometimes used to push
     # instructions past naive length checks in prompt injection attempts.
@@ -968,7 +968,7 @@ User question: "{question}"
 # ---------------------------------------------------------------------------
 
 @app.get("/api/claims")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 async def get_claims(request: Request):
     return {"claims": CLAIMS}
 
@@ -978,7 +978,7 @@ async def get_claims(request: Request):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/claims")
-@limiter.limit("30/minute")
+@limiter.limit("60/minute")
 async def create_claim(request: Request, payload: ClaimCreate):
     claim = {
         "id": _next_claim_id(),
