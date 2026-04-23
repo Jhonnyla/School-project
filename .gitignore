@@ -25,3 +25,7 @@ Thumbs.db
 
 # Claude Code worktrees (internal tooling)
 .claude/worktrees/
+
+# Google OAuth — NEVER commit these
+backend/credentials.json
+backend/token.json

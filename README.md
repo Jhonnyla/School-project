@@ -1,6 +1,6 @@
 # Post-Purchase Concierge (PPC)
 
-A full-stack agentic AI system that tracks warranties and return windows from purchase receipts, researches live retailer policies via real web search, and helps users initiate return claims — all powered by a multi-agent pipeline running on Groq's Llama 3.3-70B.
+A full-stack agentic AI system that reads purchase receipts using computer vision, automatically researches live retailer return and warranty policies, tracks return windows in real time, and answers natural language eligibility questions — all powered by a three-agent pipeline running on Google Gemini.
 
 ---
 
@@ -11,152 +11,111 @@ A full-stack agentic AI system that tracks warranties and return windows from pu
 | **Frontend** | React 18 + Vite 5 |
 | **Styling** | Tailwind CSS 3 |
 | **Backend** | Python 3.13 + FastAPI |
-| **LLM Provider** | Groq (Llama 3.3-70B Versatile) |
+| **Vision / LLM** | Google Gemini 2.5 Flash (multimodal) |
 | **Web Search** | Tavily Search API |
-| **Agent Coordination** | Fixed pipeline (Orchestrator → Inbox Scout → Agent 1 → Agent 2) |
+| **Rate Limiting** | SlowAPI |
+| **Agent Coordination** | Fixed pipeline — Vision → Policy Research → Concierge |
 
 ---
 
-## Milestone I — Web UI
+## Architecture — Three Agents
 
-**Goal:** Build a usable front-end for submitting tasks and viewing agent responses.
-
-### Features
-
-- **Dashboard** with Recent Purchases table: product name, price, retailer, purchase date, warranty/return status badges with visual countdown bars.
-- **Ask the Concierge** chat box: natural-language questions with reasoning display and source links.
-- **Action buttons:** Sync Inbox, Research Policies.
-- **Sidebar navigation:** Purchases, Active Claims, Settings, Policy Database.
-- **FinTech-style design:** Deep Navy sidebar, Emerald active status, Amber expiring-soon indicators.
-
-### Deliverables
-
-- [x] Web UI (React + Tailwind) to submit tasks and view agent responses.
-- [x] Functional and clearly structured; usable by a non-technical user.
-- [x] Short description (README) with tech stack and screenshot placeholders.
-- [x] Code for the front-end in the repo.
+```
+User uploads receipt (image or PDF)
+          │
+          ▼
+  Agent 1 — Gemini Vision
+  Reads any receipt format
+  Extracts: product, retailer, date, price, order #
+          │
+          ▼
+  Agent 2 — Policy Research Agent
+  Tavily searches retailer's live policy page
+  Gemini extracts: return window, conditions,
+  warranty summary, policy URL
+  → Saved to Policy Database
+          │
+          ▼
+  Dashboard — purchase tracked, window counting down
+          │
+          ▼
+  User clicks "Ask Concierge" on a purchase row
+          │
+          ▼
+  Agent 3 — Concierge Agent
+  Loads purchase context + researched policy
+  Answers natural language questions in plain English
+  with source link
+          │
+          ▼
+  User clicks "Start Claim" → logged to Active Claims
+```
 
 ---
 
-## Milestone II — Multi-Agent Workflow
+## Agent Details
 
-**Goal:** Implement a real multi-agent pipeline where each agent uses an LLM and has a distinct, restricted role.
-
-### Architecture Overview
-
-The system implements a **fixed pipeline** coordination mechanism:
-
-```
-User Question
-      │
-      ▼
-Orchestrator (Intent Classifier)
-      │
-      ▼
-Inbox Scout (Python — receipt lookup, no LLM)
-      │
-      ▼
-Agent 1: Policy Research Agent  ──► Tavily Web Search (live internet)
-      │
-      ▼
-Agent 2: Purchase Concierge Agent  ──► Personalized response
-      │
-      ▼
-User Answer + Start Claim option
-```
-
-### Agent 1 — Policy Research Agent
+### Agent 1 — Gemini Vision
 
 | Property | Detail |
 |----------|--------|
-| **Role** | Tool-using Executor |
-| **Model** | Groq / Llama 3.3-70B Versatile |
+| **Role** | Receipt Reader |
+| **Model** | Gemini 2.5 Flash (multimodal) |
+| **Input** | Receipt image or PDF (any format, any retailer) |
+| **Output** | Structured JSON: product, retailer, date, price, order # |
+| **Fallback** | 2-pass retry across 3 Gemini model variants on 503 |
+
+Reads receipts as raw image bytes — no OCR template required. Handles printed receipts, email screenshots, and PDFs from any retailer. Injects today's date into the prompt to correctly handle receipts without an explicit year.
+
+### Agent 2 — Policy Research Agent
+
+| Property | Detail |
+|----------|--------|
+| **Role** | Tool-using Policy Fetcher |
+| **Model** | Gemini 2.5 Flash (function calling) |
 | **Tool** | `web_search` via Tavily Search API |
-| **Input** | Retailer name, product name, membership tier |
-| **Output** | Structured policy data: return window, conditions, exclusions, warranty summary, membership benefit, real source URLs |
+| **Input** | Retailer name extracted by Agent 1 |
+| **Output** | Return window (days), conditions, warranty summary, policy URL |
+| **Trigger** | Runs automatically after every successful upload |
 
-This agent uses **Groq function calling** to drive an agentic search loop. It decides what to search, reads the results from live retailer pages, and extracts structured policy facts. It makes up to 4 real web searches per retailer per request.
+Runs up to 4 live Tavily searches per retailer, extracts structured policy data from the retailer's actual policy page, and saves it to the in-memory Policy Database keyed by retailer. If the policy page is unreachable, returns sensible defaults rather than crashing.
 
-**Restriction:** The agent is scoped to policy research only. It has no access to user data, no write tools, and no ability to take actions — only search and synthesize.
-
-### Agent 2 — Purchase Concierge Agent
+### Agent 3 — Purchase Concierge Agent
 
 | Property | Detail |
 |----------|--------|
-| **Role** | Domain Expert / Explainer |
-| **Model** | Groq / Llama 3.3-70B Versatile |
-| **Tools** | None — synthesis only |
-| **Input** | User's question, purchase context, Agent 1's live policy findings |
-| **Output** | Personalized, intent-aware answer with exact day-count math |
+| **Role** | Domain Expert / Q&A |
+| **Model** | Gemini 2.5 Flash |
+| **Tools** | None — reasoning only |
+| **Input** | User question + purchase context + researched policy + chat history |
+| **Output** | Plain English answer with source link and claim CTA |
 
-This agent receives Agent 1's research and synthesizes it with the user's specific purchase data into a direct, friendly answer. It detects the user's intent (return eligibility, return process, warranty, etc.) and tailors its response accordingly. It also outputs a `claim_context` object that the UI uses to offer a "Start Return Claim" button when the item is eligible.
+Pre-loaded with the exact purchase the user clicked "Ask Concierge" on — no guessing. Maintains conversation history (last 6 messages) for context. If asked about a brand with no recorded purchase, searches the brand's policy and answers with a clear disclaimer.
 
-**Restriction:** No tool access. Cannot search the web, modify data, or take external actions.
+---
 
-### Coordination Mechanism
+## Features
 
-**Type:** Fixed pipeline (A → B → C)
+- **Receipt Upload** — drag and drop or click to upload; Gemini Vision reads it instantly
+- **Automatic Policy Research** — triggers immediately after upload, no manual button
+- **Policy Database** — cards with return window, conditions, warranty, and a direct link to the retailer's policy page
+- **Return Window Tracking** — days remaining calculated in real time on every load
+- **Ask Concierge per row** — click the button on any purchase to pre-load its context into the chat
+- **Chat History** — conversation memory across multiple questions in a session
+- **Start Claim** — logs claims to Active Claims with purchase details
+- **Brand-only fallback** — if no purchase found, live-searches the brand's policy and answers with disclaimer
 
-The Orchestrator (`POST /api/agent/ask`) controls execution order:
-1. Classifies intent from the user's question (fast LLM call, temperature 0.1)
-2. Runs Inbox Scout to locate the purchase receipt (Python keyword lookup — no LLM, no network)
-3. Calls Agent 1 to fetch live policy data from the web
-4. Calls Agent 2 to synthesize the final personalized answer using Agent 1's output
+---
 
-Each agent's output becomes the next agent's input. Agent 2 cannot run without Agent 1's research, and Agent 1 cannot run without the purchase context from the Inbox Scout.
+## Security
 
-### New Features in Milestone II
-
-**Sync Inbox**
-- Animated progress bar with 5 steps ("Connecting to Gmail…", "Scanning 1,243 emails…", etc.)
-- On completion, a membership modal pops up asking the user to select their Amazon and Best Buy membership tier before purchases are revealed
-
-**Research Policies button**
-- Triggers Agent 1 to run real Tavily web searches for each retailer (Best Buy, Amazon, Oura)
-- Navigates to the Policy Database tab and populates it with live-researched data
-- Shows the actual search queries Agent 1 made, the number of sources found, and expandable policy cards
-
-**Policy Database**
-- Starts empty — populated only after "Research Policies" is clicked
-- Each card shows: policy summary, return conditions, membership benefit, warranty info, exclusions, and real URLs from Tavily
-- Only shows the 3 retailers present in the user's purchase history (no hardcoded Apple/Target/Walmart)
-
-**Active Claims**
-- Starts empty — no hardcoded mock claims
-- When the Concierge determines an item is eligible for return, a green "Start Return Claim" banner appears in the chat
-- Clicking it creates a claim in the backend (in-memory store) and navigates to Active Claims
-- Each claim includes the real source URLs found by Agent 1 for the user to proceed with the return
-
-**Membership Selection**
-- Amazon: toggle between Standard / Amazon Prime (with a "Link Amazon Account" button)
-- Best Buy: three-tier card selector — My Best Buy (Free / 15d), My Best Buy Plus (30d), My Best Buy Total (45d) — with a "Link Best Buy Account" button
-- Oura: no paid membership tiers — always Standard 30-day
-- Selection updates the backend (`POST /api/user/memberships`) so all agents use the correct return window
-
-### Supported Retailers
-
-| Retailer | Membership Tiers | Return Window |
-|----------|-----------------|---------------|
-| Best Buy | Free (15d) · Plus (30d) · Total (45d) | Tier-dependent |
-| Amazon | Standard (30d) · Prime (30d) | Same window, Prime has easier process |
-| Oura | Standard only (30d) | Flat 30 days |
-
-### Data Privacy Note
-
-The demo uses **fake purchase data** (hardcoded product names and dates relative to today). The only real data sent to external APIs:
-- To **Groq:** the user's question text, product name, retailer, purchase date, and membership tier label
-- To **Tavily:** search query strings (e.g. "Best Buy Total return policy 2025")
-
-The user's name and email are hardcoded demo values and are never sent to any external service.
-
-### Deliverables
-
-- [x] At least two distinct agents with different roles (Policy Research Agent + Purchase Concierge Agent)
-- [x] Tool-using executor agent (Agent 1 with Tavily web search via Groq function calling)
-- [x] Domain expert / explainer agent (Agent 2 — synthesis only)
-- [x] Defined coordination mechanism (fixed pipeline with orchestrator controller)
-- [x] Visible pipeline UI showing each agent's step, search queries made, and intent detected
-- [x] Live web data — real retailer policy pages fetched on every request
+| Concern | Mitigation |
+|---------|------------|
+| Prompt injection via receipt | Explicit `SECURITY RULE` in all system prompts |
+| API abuse | SlowAPI rate limiting (30/min upload, 60/min ask) |
+| CORS | Restricted to `localhost:5173` only |
+| Input validation | Pydantic models with `min_length` / `max_length` on all request fields |
+| Model overload (503) | 2-pass retry with 3-model fallback chain + 3s sleep between passes |
 
 ---
 
@@ -166,31 +125,32 @@ The user's name and email are hardcoded demo values and are never sent to any ex
 
 - **Node.js 18+** and npm
 - **Python 3.11+** and pip
-- A **Groq API key** — free at [console.groq.com](https://console.groq.com)
+- A **Google Gemini API key** — free at [aistudio.google.com](https://aistudio.google.com)
 - A **Tavily API key** — free tier at [tavily.com](https://tavily.com)
 
 ### 1. Backend
 
 ```bash
-cd code/backend
+cd backend
 pip install -r requirements.txt
 ```
 
-Create `code/backend/.env`:
+Create `backend/.env`:
 ```
-GROQ_API_KEY=your_groq_key_here
+GEMINI_API_KEY=your_gemini_key_here
 TAVILY_API_KEY=your_tavily_key_here
 ```
 
 Start the server:
 ```bash
-uvicorn main:app --reload --port 8000 --app-dir .
+cd backend
+python3 -m uvicorn main:app --reload --port 8000
 ```
 
 ### 2. Frontend
 
 ```bash
-cd code/frontend
+cd frontend
 npm install
 npm run dev
 ```
@@ -199,10 +159,11 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ### Demo Flow
 
-1. Click **Sync Inbox** → watch the progress bar → confirm your memberships in the modal → purchases appear
-2. Click **Research Policies** → Agent 1 runs live Tavily searches → Policy Database populates with real data
-3. Ask the **Concierge** a question (e.g. *"Can I still return my Canon camera?"*) → watch both agents work in the pipeline → if eligible, click **Start Return Claim**
-4. Check **Active Claims** to see your claim with real return portal links
+1. **Upload a receipt** (image or PDF) → Gemini Vision reads it → purchase appears in the table
+2. **Policy Database** populates automatically — return window, conditions, warranty, source link
+3. Click **Ask Concierge** on any purchase row → type a natural language question (e.g. *"Can I return this if I opened the box?"*)
+4. View the plain English answer with a link to the retailer's policy page
+5. Click **Start Claim** → logged to Active Claims
 
 ---
 
@@ -210,30 +171,44 @@ Open [http://localhost:5173](http://localhost:5173).
 
 ```
 PPC/
-├── code/
-│   ├── backend/
-│   │   ├── main.py              # All agents, endpoints, LLM calls
-│   │   ├── requirements.txt
-│   │   └── .env                 # GROQ_API_KEY + TAVILY_API_KEY (not committed)
-│   └── frontend/
-│       ├── src/
-│       │   ├── App.jsx                        # State, routing, action handlers
-│       │   └── components/
-│       │       ├── AgentInteraction.jsx       # Chat box + pipeline UI + Start Claim
-│       │       ├── ActionButtons.jsx          # Sync Inbox, Research Policies
-│       │       ├── PurchasesTable.jsx         # Purchases + sync progress bar
-│       │       ├── PolicyDatabase.jsx         # Dynamic from research results
-│       │       ├── ActiveClaims.jsx           # Dynamic from claims state
-│       │       ├── Settings.jsx               # Membership tier selectors
-│       │       ├── SyncModal.jsx              # Post-sync membership confirmation
-│       │       ├── Sidebar.jsx
-│       │       └── WarrantyStatus.jsx
-│       ├── vite.config.js                     # API proxy /api → localhost:8000
-│       └── package.json
-├── docs/
-│   ├── AGENT_ARCHITECTURE.md    # Mermaid diagrams — flowchart, sequence, ER
-│   ├── DESIGN_DOCUMENT.md       # Agent design doc (roles, I/O, comms, failures)
-│   ├── SECURITY_ANALYSIS.md     # Vulnerability register with mitigations
-│   └── assets/                  # Screenshots
+├── backend/
+│   ├── main.py              # All three agents, endpoints, Gemini + Tavily calls
+│   ├── requirements.txt
+│   └── .env                 # GEMINI_API_KEY + TAVILY_API_KEY (not committed)
+├── frontend/
+│   ├── src/
+│   │   ├── App.jsx                        # State, routing, action handlers
+│   │   └── components/
+│   │       ├── ReceiptUpload.jsx          # Upload UI + Vision trigger
+│   │       ├── AgentInteraction.jsx       # Chat thread + concierge UI
+│   │       ├── PurchasesTable.jsx         # Purchases + Ask Concierge button per row
+│   │       ├── PolicyDatabase.jsx         # Policy cards with source links
+│   │       ├── ActiveClaims.jsx           # Claim history
+│   │       ├── Settings.jsx               # Profile + notification preferences
+│   │       ├── ActionButtons.jsx
+│   │       ├── Sidebar.jsx
+│   │       └── WarrantyStatus.jsx
+│   ├── vite.config.js                     # API proxy /api → localhost:8000
+│   └── package.json
 └── README.md
 ```
+
+---
+
+## Production Roadmap
+
+| Item | Description |
+|------|-------------|
+| **SQLite Policy Library** | Replace live scraping with a curated database of major retailer policies, updated on a nightly schedule. Live Tavily search becomes fallback for unknown retailers only. |
+| **Browser Extension** | Detect purchases at checkout in real time — auto-log receipt, trigger pipeline without manual upload |
+| **Retailer Portal Integration** | "Start Claim" triggers the retailer's actual return portal, pre-filled with order number and reason |
+| **Structured Policy Data** | Pre-cleaned, normalized policy data per retailer improves Concierge answer accuracy and consistency |
+
+---
+
+## Known Limitations (Demo)
+
+- Policy data quality depends on how well-structured the retailer's policy page is — messy pages produce less precise answers
+- In-memory storage resets on backend restart — no persistence between sessions
+- Claim execution is a logging placeholder — no retailer portal integration yet
+- Concierge answer quality is conditional on Agent 2's extraction quality (output chains)

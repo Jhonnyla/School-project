@@ -21,28 +21,13 @@ function getReturnStatus(purchaseDate, returnWindowDays) {
   return { status: 'active', daysLeft, label: `${daysLeft} days left to return` }
 }
 
-/**
- * Progress 0–100 for countdown bar (100 = full window remaining, 0 = expired).
- */
-function getProgressPercent(purchaseDate, returnWindowDays) {
-  const daysLeft = getReturnDaysRemaining(purchaseDate, returnWindowDays)
-  return Math.round((daysLeft / returnWindowDays) * 100)
-}
-
 export default function WarrantyStatus({ purchaseDate, returnWindowDays }) {
-  const { status, daysLeft, label } = getReturnStatus(purchaseDate, returnWindowDays)
-  const percent = getProgressPercent(purchaseDate, returnWindowDays)
+  const { status, label } = getReturnStatus(purchaseDate, returnWindowDays)
 
   const statusStyles = {
     active: 'bg-emerald-active text-white',
     expiring: 'bg-amber-expiring text-white',
     expired: 'bg-slate-500 text-white',
-  }
-
-  const barStyles = {
-    active: 'bg-emerald-active',
-    expiring: 'bg-amber-expiring',
-    expired: 'bg-slate-400',
   }
 
   return (
@@ -53,15 +38,6 @@ export default function WarrantyStatus({ purchaseDate, returnWindowDays }) {
         aria-label={`Return window: ${label}`}
       >
         {label}
-      </div>
-      <div
-        className="mt-1.5 h-1.5 w-full bg-slate-200 rounded-full overflow-hidden"
-        aria-hidden
-      >
-        <div
-          className={`h-full rounded-full transition-all duration-300 ${barStyles[status]}`}
-          style={{ width: `${percent}%` }}
-        />
       </div>
     </div>
   )
