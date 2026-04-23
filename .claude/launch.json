@@ -3,14 +3,16 @@
   "configurations": [
     {
       "name": "PPC Frontend (Vite)",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeExecutable": "/usr/local/bin/node",
+      "runtimeArgs": ["node_modules/.bin/vite", "--port", "5173"],
+      "cwd": "frontend",
       "port": 5173
     },
     {
       "name": "PPC Backend (FastAPI)",
-      "runtimeExecutable": "uvicorn",
-      "runtimeArgs": ["main:app", "--reload", "--port", "8000", "--app-dir", "backend"],
+      "runtimeExecutable": "/usr/local/bin/python3",
+      "runtimeArgs": ["-m", "uvicorn", "main:app", "--reload", "--port", "8000"],
+      "cwd": "backend",
       "port": 8000
     }
   ]

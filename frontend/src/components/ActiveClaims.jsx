@@ -31,13 +31,13 @@ export default function ActiveClaims({ claims = [] }) {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/80">
           <h2 className="text-lg font-semibold text-navy-900">Active Claims</h2>
-          <p className="text-sm text-slate-500 mt-0.5">Return and exchange claims you have started.</p>
+          <p className="text-sm text-slate-500 mt-0.5">Return and exchange claims started from your purchases.</p>
         </div>
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <span className="text-4xl mb-3">📋</span>
           <p className="text-sm font-medium text-slate-600">No active claims</p>
           <p className="text-xs text-slate-400 mt-1">
-            Ask the Concierge about a product's return eligibility on the Dashboard, then click <span className="font-semibold">Start Return Claim</span> to create one.
+            Click <span className="font-semibold">Start Claim</span> on any purchase in the Dashboard to track a return here.
           </p>
         </div>
       </div>
@@ -71,7 +71,7 @@ export default function ActiveClaims({ claims = [] }) {
         <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/80">
           <h2 className="text-lg font-semibold text-navy-900">Claims & Tracking</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Return claims started from the Concierge chat.
+            History of return and exchange claims.
           </p>
         </div>
         <ul className="divide-y divide-slate-100">

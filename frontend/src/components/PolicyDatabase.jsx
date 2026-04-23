@@ -1,29 +1,24 @@
 import React, { useState } from 'react'
 
-const RETAILER_LOGOS = {
-  'Best Buy': '🟦',
-  'Amazon':   '🟧',
-  'Oura':     '⬛',
-}
-
 export default function PolicyDatabase({ policyResearch }) {
   const [selected, setSelected] = useState(null)
 
   // ── Empty state ───────────────────────────────────────────────────────────
-  if (!policyResearch) {
+  if (!policyResearch || policyResearch.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/80">
           <h2 className="text-lg font-semibold text-navy-900">Policy Database</h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Live return and warranty policies researched from retailer websites.
+            Return and warranty policies — auto-populated when you upload a receipt.
           </p>
         </div>
         <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
           <span className="text-4xl mb-3">🔍</span>
-          <p className="text-sm font-medium text-slate-600">No policies researched yet</p>
+          <p className="text-sm font-medium text-slate-600">No policies yet</p>
           <p className="text-xs text-slate-400 mt-1">
-            Click <span className="font-semibold">Research Policies</span> on the Dashboard to have Agent 1 search the web for live return and warranty data.
+            Upload a receipt on the Dashboard — the AI will automatically research the retailer's
+            return and warranty policies and save them here with a direct link to their policy page.
           </p>
         </div>
       </div>
@@ -55,7 +50,6 @@ export default function PolicyDatabase({ policyResearch }) {
       <div className="space-y-3">
         {policyResearch.map((policy) => {
           const isOpen = selected === policy.retailer
-          const logo = RETAILER_LOGOS[policy.retailer] || '🏪'
           return (
             <div
               key={policy.retailer}
@@ -69,13 +63,25 @@ export default function PolicyDatabase({ policyResearch }) {
               >
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{logo}</span>
+                    <span className="text-2xl">🏪</span>
                     <div>
                       <p className="font-semibold text-navy-900">{policy.retailer}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         Return window: <span className="font-medium text-navy-900">{policy.return_window_days}d</span>
-                        {' · '}
-                        <span className="text-slate-400">{policy.membership}</span>
+                        {policy.policy_url && (
+                          <>
+                            {' · '}
+                            <a
+                              href={policy.policy_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-emerald-600 hover:underline"
+                              onClick={e => e.stopPropagation()}
+                            >
+                              Official Policy ↗
+                            </a>
+                          </>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -108,9 +114,6 @@ export default function PolicyDatabase({ policyResearch }) {
                   {policy.conditions && (
                     <Row label="Conditions" value={policy.conditions} />
                   )}
-                  {policy.membership_benefit && (
-                    <Row label="Membership Benefit" value={policy.membership_benefit} />
-                  )}
                   {policy.warranty_summary && (
                     <Row label="Warranty" value={policy.warranty_summary} />
                   )}
@@ -118,19 +121,18 @@ export default function PolicyDatabase({ policyResearch }) {
                     <Row label="Exclusions" value={policy.important_exclusions} />
                   )}
 
-                  {/* Search queries used */}
-                  {policy.searches_made?.length > 0 && (
+                  {/* Direct policy link */}
+                  {policy.policy_url && (
                     <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        Agent 1 searched for
-                      </p>
-                      <ul className="space-y-1">
-                        {policy.searches_made.map((q, i) => (
-                          <li key={i} className="text-xs text-slate-500 font-mono">
-                            🔍 "{q}"
-                          </li>
-                        ))}
-                      </ul>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Official Policy Page</p>
+                      <a
+                        href={policy.policy_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-emerald-600 hover:underline flex items-center gap-1"
+                      >
+                        ↗ {policy.policy_url}
+                      </a>
                     </div>
                   )}
 
@@ -138,7 +140,7 @@ export default function PolicyDatabase({ policyResearch }) {
                   {policy.sources?.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        Sources
+                        Research Sources
                       </p>
                       <ul className="space-y-1">
                         {policy.sources.map((s, i) => (
@@ -157,15 +159,20 @@ export default function PolicyDatabase({ policyResearch }) {
                     </div>
                   )}
 
-                  {policy.policy_url && (
-                    <a
-                      href={policy.policy_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline mt-1"
-                    >
-                      ↗ View official policy page
-                    </a>
+                  {/* Searches made */}
+                  {policy.searches_made?.length > 0 && (
+                    <div>
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        AI searched for
+                      </p>
+                      <ul className="space-y-1">
+                        {policy.searches_made.map((q, i) => (
+                          <li key={i} className="text-xs text-slate-500 font-mono">
+                            🔍 "{q}"
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   )}
                 </div>
               )}
